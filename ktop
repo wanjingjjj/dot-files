@@ -1,0 +1,20 @@
+#!/bin/bash
+
+session=`basename $KUBIE_SESSION`
+age=/tmp/age.$session
+nodes=/tmp/nodes.$session
+tops=/tmp/tops.$session
+kubectl get node |awk '{print $1" "$2" "$4}'|sort -k1 -s > $age &
+kubectl get node -o=custom-columns="TYPE:metadata.labels['beta\.kubernetes\.io/instance-type'],NAME:metadata.labels['kubernetes\.io/hostname'], LIFECYCLE:metadata.labels['node\.kubernetes\.io/lifecycle'], HOST:metadata.annotations['csi\.volume\.kubernetes\.io/nodeid'], NODEGROUP:metadata.labels['node\.kubernetes\.io/role'],EKSNODEGROUP:metadata.labels['eks\.amazonaws\.com/nodegroup'], KNODEGROUP:metadata.labels['eks\.karpenter/nodegroup'], AZ:metadata.labels['topology\.kubernetes\.io/zone']"|awk '{
+	match($4, /(i-[0-9a-z]+)|(HOST)/);
+	host=substr($4,RSTART,RLENGTH);
+	if (length(host) == 0) host="<none>";
+	ng=$5;
+	if ($6 != "<none>" && ng == "<none>") ng=$6;
+        if ($7 != "<none>" && ng == "<none>") ng=$7;
+	print $1" "$2" "$3" "host" "ng" "$8
+}'|sort -k2 -s > $nodes &
+kubectl top nodes |sort -k1 -s > $tops &
+wait
+join -1 1 -2 2 $tops $nodes |join - $age|sed 's/.eu-west-1.compute.internal//g'| sort -k9 -s|column -t|spc -c ~/.local/bin/spc.rc
+rm $age $nodes $tops
